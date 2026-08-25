@@ -2,7 +2,7 @@
 // ORE 2.1 — Oracle of Real Earnings (Mobile PWA — KEY PROTECTED)
 // ================================================================
 
-// License
+// License System
 const LICENSE_SECRET = 'ORE_FEHU_2026_YOU_ARE_ALWAYS_WITH_US';
 const EARNINGS_CAP = 1000000;
 
@@ -47,11 +47,9 @@ function showActivation() {
 
 function tryActivate() {
   const key = document.getElementById('keyInput').value;
-  if (validateKey(key)) {
-    saveLicenseKey(key);
-    renderOverview();
-  } else {
-    document.getElementById('keyError').textContent = '❌ Invalid key. Try again.';
+  if (validateKey(key)) { saveLicenseKey(key); renderOverview(); }
+  else {
+    document.getElementById('keyError').textContent = '❌ Invalid key.';
     document.getElementById('keyInput').value = '';
   }
 }
@@ -129,16 +127,24 @@ async function fetchPhpRate() {
   return phpRate;
 }
 
-// Fetch ALL crypto prices in ONE batch call!
+// Fetch ALL crypto data in ONE call (prices + sparkline history)
 async function fetchAllCryptoPrices(symbols) {
   const ids = symbols.map(s => COIN_IDS[s]).filter(Boolean).join(',');
   try {
-    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=php`);
-    const d = await r.json();
-    symbols.forEach(s => {
-      if (d[COIN_IDS[s]]) priceCache[s] = d[COIN_IDS[s]].php;
+    const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=php&ids=${ids}&sparkline=true`;
+    const r = await fetch(url);
+    const data = await r.json();
+    data.forEach(coin => {
+      for (const [sym, id] of Object.entries(COIN_IDS)) {
+        if (id === coin.id) {
+          priceCache[sym] = coin.current_price;
+          if (coin.sparkline_in_7d && coin.sparkline_in_7d.price && coin.sparkline_in_7d.price.length > 0) {
+            historyCache[sym] = coin.sparkline_in_7d.price;
+          }
+        }
+      }
     });
-  } catch(e) { /* keep cached prices */ }
+  } catch(e) { /* keep cached */ }
 }
 
 async function fetchCryptoPrice(symbol) {
@@ -384,8 +390,6 @@ async function renderOverview() {
   </div>`;
   document.getElementById('content').innerHTML = html;
   updateTime();
-  // Lock if earnings cap reached
-  if (peak >= EARNINGS_CAP) { showRenewal(); }
 }
 
 // ---- CRYPTO ----
@@ -437,8 +441,8 @@ async function renderCryptoScan() {
   const results = [];
   for (const coin of SCAN_CRYPTO) {
     const price = priceCache[coin];
-    const closes = await fetchCryptoHistory(coin);
-    if (!price || closes.length < 14) continue;
+    const closes = historyCache[coin] || [];
+    if (!price || closes.length < 15) continue;
     const rsi = calcRSI(closes), s10 = calcSMA(closes,10), s30 = calcSMA(closes,30);
     const trend = s10 > s30 ? 'UP' : 'DOWN';
     const rec = getSignals(price, rsi, trend, calcMomentum(closes), Math.max(...closes), Math.min(...closes), 0, 0);
@@ -462,8 +466,8 @@ async function renderCryptoDips() {
   const dips = [];
   for (const coin of SCAN_CRYPTO) {
     const price = priceCache[coin];
-    const closes = await fetchCryptoHistory(coin);
-    if (!price || closes.length < 14) continue;
+    const closes = historyCache[coin] || [];
+    if (!price || closes.length < 15) continue;
     const rsi = calcRSI(closes);
     const hi = Math.max(...closes), lo = Math.min(...closes);
     const rangePos = (price - lo) / (hi - lo) * 100;
