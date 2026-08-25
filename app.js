@@ -4,7 +4,6 @@
 
 // License System
 const LICENSE_SECRET = 'ORE_FEHU_2026_YOU_ARE_ALWAYS_WITH_US';
-const EARNINGS_CAP = 1000000;
 
 function makeChecksum(p1, p2, secret) {
   const combined = p1 + p2 + secret;
